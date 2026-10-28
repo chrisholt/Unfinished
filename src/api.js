@@ -4,11 +4,15 @@
 
 import { SEARCH_RADIUS_M, haversine } from "./geo.js";
 
+// Public Overpass servers, tried in order. They are free and often busy, so
+// a failure on one moves on to the next.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
 ];
+const OVERPASS_TIMEOUT_MS = 45000;
 const NOMINATIM = "https://nominatim.openstreetmap.org";
 
 function cacheGet(key) {
@@ -33,19 +37,22 @@ async function fetchJson(url, options = {}, timeoutMs = 30000) {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...options, signal: ctrl.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
     return await res.json();
+  } catch (err) {
+    if (err.name === "AbortError") throw Object.assign(new Error("timed out"), { timeout: true });
+    throw err;
   } finally {
     clearTimeout(timer);
   }
 }
 
 function overpassQuery({ lat, lon }, radius) {
-  const around = `(around:${radius},${lat},${lon})`;
-  return `[out:json][timeout:25];
+  const around = `(around:${radius},${lat.toFixed(5)},${lon.toFixed(5)})`;
+  return `[out:json][timeout:40];
 (
-  nwr${around}["amenity"~"^(pub|bar|biergarten)$"]["name"];
-  nwr${around}["amenity"~"^(nightclub|restaurant|cafe)$"]["name"]["happy_hours"];
+  nwr["amenity"~"^(pub|bar|biergarten)$"]["name"]${around};
+  nwr["happy_hours"]["amenity"~"^(nightclub|restaurant|cafe)$"]["name"]${around};
 );
 out center tags;`;
 }
@@ -82,14 +89,24 @@ export async function fetchVenues(origin, radius = SEARCH_RADIUS_M) {
   if (cached) return cached;
 
   const body = "data=" + encodeURIComponent(overpassQuery(origin, radius));
-  let lastError;
+  const request = (endpoint) =>
+    fetchJson(
+      endpoint,
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body },
+      OVERPASS_TIMEOUT_MS,
+    );
+  const errors = [];
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
-      const data = await fetchJson(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
+      let data;
+      try {
+        data = await request(endpoint);
+      } catch (err) {
+        // "Too many requests" / "gateway timeout" usually clear within seconds.
+        if (err.status !== 429 && err.status !== 504) throw err;
+        await new Promise((r) => setTimeout(r, 3000));
+        data = await request(endpoint);
+      }
       const seen = new Set();
       const venues = (data.elements || [])
         .map((el) => normaliseElement(el, origin))
@@ -98,10 +115,15 @@ export async function fetchVenues(origin, radius = SEARCH_RADIUS_M) {
       cacheSet(key, venues);
       return venues;
     } catch (err) {
-      lastError = err;
+      errors.push(err);
     }
   }
-  throw new Error(`Couldn't reach the OpenStreetMap venue service (${lastError?.message || "network error"}).`);
+  const reason = errors.every((e) => e.timeout || e.status === 429 || e.status === 504)
+    ? "the servers are busy right now — wait a minute and retry"
+    : errors.every((e) => !e.status && !e.timeout)
+      ? "check your internet connection, or turn off any ad or content blocker for this site"
+      : errors.map((e) => e.message).join(", ");
+  throw new Error(`Couldn't load venues from OpenStreetMap: ${reason}.`);
 }
 
 export async function searchPlaces(query) {
