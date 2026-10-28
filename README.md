@@ -9,7 +9,7 @@ npm start          # http://localhost:8080
 npm test           # unit tests (Node 18+)
 ```
 
-No dependencies or API keys. It's a static site: every push to `main` runs the tests and deploys it to GitHub Pages (`.github/workflows/pages.yml`). One-time setup: in the repo's **Settings → Pages**, set **Source** to **GitHub Actions**. Opening `index.html` straight from disk won't work because browsers block ES modules on `file://`.
+No dependencies or API keys. It's a static site, published with GitHub Pages straight from the `main` branch (**Settings → Pages → Deploy from a branch → main, / (root)**) at https://chrisholt.github.io/Unfinished/. The empty `.nojekyll` file stops Pages' Jekyll step from dropping the `vendor/` folder. Tests run on every push and pull request (`.github/workflows/test.yml`). Opening `index.html` straight from disk won't work because browsers block ES modules on `file://`.
 
 ## Features
 
