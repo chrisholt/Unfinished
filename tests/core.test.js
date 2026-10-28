@@ -1,10 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSchedule, statusAt, overlapMinutes, describeSchedule } from "../src/hours.js";
+import { parseSchedule, statusAt, describeSchedule } from "../src/hours.js";
 import { haversine } from "../src/geo.js";
-import { estimateMenu, estimateSchedule, currencyFor, textToMenu, menuToText } from "../src/menu.js";
-import { enrichVenue } from "../src/venues.js";
-import { normaliseElement } from "../src/api.js";
+import { VENUES, HOME } from "../src/data/victoria.js";
 
 // 2026-10-28 is a Wednesday.
 const at = (h, m = 0, day = 28) => new Date(2026, 9, day, h, m);
@@ -29,43 +27,11 @@ test("status: active, upcoming, and past-midnight ranges", () => {
 
   const late = parseSchedule("We 22:00-01:00");
   assert.equal(statusAt(late, at(0, 30, 29)).active, true); // Thu 00:30
-  assert.equal(overlapMinutes(late, at(23), at(23, 59, 28)), 59);
-});
-
-test("overlap minutes", () => {
-  const rules = parseSchedule("Mo-Fr 16:00-18:00");
-  assert.equal(overlapMinutes(rules, at(17), at(19)), 60);
-  assert.equal(overlapMinutes(rules, at(15), at(16)), 0);
 });
 
 test("haversine", () => {
   const d = haversine({ lat: 51.5007, lon: -0.1246 }, { lat: 51.5033, lon: -0.1196 });
   assert.ok(d > 400 && d < 500, String(d));
-});
-
-test("estimates are deterministic and discounted", () => {
-  const venue = { id: "node/1", kind: "pub", tags: { brewery: "Guinness;Carlsberg" } };
-  const gbp = currencyFor("gb");
-  assert.equal(gbp.code, "GBP");
-  const a = estimateMenu(venue, gbp);
-  assert.deepEqual(a, estimateMenu(venue, gbp));
-  assert.equal(estimateSchedule(venue), estimateSchedule(venue));
-  assert.equal(a[0].items[0].name, "Pint of Guinness");
-  for (const s of a) for (const i of s.items) assert.ok(i.happy <= i.regular && i.happy > 0);
-  assert.deepEqual(textToMenu(menuToText(a)), a);
-});
-
-test("prefers OSM happy_hours over estimates", () => {
-  const v = enrichVenue({ id: "node/2", kind: "bar", osmHappyHours: "Mo-Su 12:00-13:00", tags: {} }, currencyFor("us"));
-  assert.equal(v.scheduleSource, "osm");
-  assert.equal(v.scheduleText, "Mo-Su 12:00-13:00");
-});
-
-test("normalises Overpass ways via their centre", () => {
-  const v = normaliseElement({ type: "way", id: 5, center: { lat: 1, lon: 2 }, tags: { name: "X", amenity: "pub" } }, { lat: 1, lon: 2 });
-  assert.equal(v.id, "way/5");
-  assert.equal(v.distance, 0);
-  assert.equal(normaliseElement({ type: "node", id: 6, lat: 1, lon: 2, tags: {} }, { lat: 1, lon: 2 }), null);
 });
 
 test("map app links", async () => {
@@ -77,4 +43,21 @@ test("map app links", async () => {
   assert.equal(googleSearchUrl("happy hour"), "https://www.google.com/maps/search/happy+hour+near+me");
   assert.equal(appleWalkUrl(p, { lat: 1, lon: 2 }), "https://maps.apple.com/?daddr=-37.81%2C144.96&dirflg=w&saddr=1%2C2");
   assert.ok(googleWalkUrl(p).includes("destination=-37.81%2C144.96&travelmode=walking"));
+});
+
+test("researched venues are complete and within 2 km of home", () => {
+  for (const v of VENUES) {
+    assert.ok(v.name && v.address && v.hoursText, v.name);
+    assert.ok(parseSchedule(v.schedule).length > 0, `${v.name}: schedule`);
+    assert.ok(haversine(HOME, v) <= 2000, `${v.name}: distance`);
+    assert.ok(v.sources.length > 0 && v.sources.every((s) => /^https:\/\//.test(s.url)), `${v.name}: sources`);
+    for (const i of v.items) assert.ok(["Drinks", "Food"].includes(i.section), `${v.name}: ${i.name}`);
+  }
+});
+
+test("late happy hours run to midnight on the right days", () => {
+  const spinnakers = parseSchedule(VENUES.find((v) => v.name.startsWith("Spinnakers")).schedule);
+  assert.equal(statusAt(spinnakers, at(22)).active, true); // Wed 10 pm
+  assert.equal(statusAt(spinnakers, at(22, 0, 30)).active, false); // Fri 10 pm
+  assert.equal(statusAt(spinnakers, at(16, 0, 31)).active, false); // Sat 4 pm
 });

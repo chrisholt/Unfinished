@@ -1,7 +1,7 @@
 {
   "name": "happy-hour-finder",
   "version": "1.0.0",
-  "description": "Happy hours, menus and prices at pubs and bars within 2 km.",
+  "description": "Real happy hours, menus and prices within 2 km of James Bay, Victoria BC.",
   "type": "module",
   "private": true,
   "scripts": {
