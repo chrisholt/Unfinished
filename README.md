@@ -9,7 +9,7 @@ npm start          # http://localhost:8080
 npm test           # unit tests (Node 18+)
 ```
 
-No dependencies or API keys. It's a static site, published with GitHub Pages straight from the `main` branch (**Settings → Pages → Deploy from a branch → main, / (root)**) at https://chrisholt.github.io/Unfinished/. The empty `.nojekyll` file stops Pages' Jekyll step from dropping the `vendor/` folder. Tests run on every push and pull request (`.github/workflows/test.yml`). Opening `index.html` straight from disk won't work because browsers block ES modules on `file://`.
+No dependencies or API keys. It's a static site, published with GitHub Pages from the `gh-pages` branch at https://chrisholt.github.io/Unfinished/ (update it by pushing `main` to `gh-pages`). The empty `.nojekyll` file stops Pages' Jekyll step from dropping the `vendor/` folder. Tests run on every push and pull request (`.github/workflows/test.yml`). Opening `index.html` straight from disk won't work because browsers block ES modules on `file://`.
 
 ## Features
 
@@ -18,6 +18,7 @@ No dependencies or API keys. It's a static site, published with GitHub Pages str
 - **Live status** for each venue (*On now · ends 18:30*, *Starts 17:00 · in 40 min*), with filters for *On now* / *Today* and sorting by distance, soonest happy hour or cheapest drink. Use **When** to plan for a different day or time.
 - **Menu & prices**: drinks and bar snacks, each with its regular price, happy-hour price and discount, in the local currency.
 - **3-stop pub crawl**: tries every route through the best-timed nearby venues and picks the one that keeps you inside happy hour longest with the least walking. You get arrival and leave times, walking time and distance for each leg, what to order, an estimated spend per person, the route on the map, a Google Maps walking-directions link and a share button. Add up to 3 of your own picks and the planner fills the gaps or finds the best order. Use *Try another route* to see alternatives.
+- **Open in Apple Maps or Google Maps**: search for happy hours near your pin, get walking directions to any venue, or follow each leg of the crawl in your phone's map app. These links work even if OpenStreetMap is unreachable.
 - **Correct the details**: if you know a venue's real times or prices, edit them in the venue panel. Your corrections are saved in your browser and take priority over everything else.
 
 ## Where the data comes from

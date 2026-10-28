@@ -104,3 +104,14 @@ test("crawl planner honours required picks", () => {
   const fixed = bestOrder([venues[2], venues[0], venues[1]], origin, at(16, 55), 55);
   assert.deepEqual(fixed.stops.map((s) => s.venue.name), ["V1", "V2", "V3"]);
 });
+
+test("map app links", async () => {
+  const { appleSearchUrl, googleSearchUrl, appleWalkUrl, googleWalkUrl } = await import("../src/maplinks.js");
+  const p = { lat: -37.81, lon: 144.96 };
+  assert.equal(appleSearchUrl("happy hour", p), "https://maps.apple.com/?q=happy+hour&sll=-37.81%2C144.96&z=15");
+  assert.equal(appleSearchUrl("happy hour"), "https://maps.apple.com/?q=happy+hour+near+me");
+  assert.equal(googleSearchUrl("happy hour", p), "https://www.google.com/maps/search/happy+hour/@-37.81,144.96,15z");
+  assert.equal(googleSearchUrl("happy hour"), "https://www.google.com/maps/search/happy+hour+near+me");
+  assert.equal(appleWalkUrl(p, { lat: 1, lon: 2 }), "https://maps.apple.com/?daddr=-37.81%2C144.96&dirflg=w&saddr=1%2C2");
+  assert.ok(googleWalkUrl(p).includes("destination=-37.81%2C144.96&travelmode=walking"));
+});
