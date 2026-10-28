@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Happy Hour Finder</title>
+  <meta name="description" content="Find happy hours, menus and prices within 2 km and plan a three-stop pub crawl.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🍺</span>
+      <div>
+        <h1>Happy Hour Finder</h1>
+        <p class="tagline">Deals within 2 km of your pin</p>
+      </div>
+    </div>
+
+    <form id="search-form" class="search" role="search" autocomplete="off">
+      <input id="search-input" type="search" placeholder="Search a suburb, street or venue…" aria-label="Search location">
+      <button type="submit" class="btn">Search</button>
+      <ul id="search-results" class="search-results" hidden></ul>
+    </form>
+
+    <div class="controls">
+      <button id="locate-btn" class="btn btn-primary" type="button">📍 Use my location</button>
+      <label class="when">
+        <span>When</span>
+        <input id="when-input" type="datetime-local">
+      </label>
+      <button id="now-btn" class="btn btn-ghost" type="button" title="Reset to the current time">Now</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel" aria-label="Results">
+      <div id="location-line" class="location-line">Set a location to find happy hours nearby. You can also click anywhere on the map.</div>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" class="tab active" data-tab="venues" aria-selected="true">Happy hours <span id="venue-count" class="count"></span></button>
+        <button role="tab" class="tab" data-tab="crawl" aria-selected="false">Pub crawl <span id="crawl-count" class="count"></span></button>
+      </nav>
+
+      <div id="tab-venues" class="tab-body">
+        <div class="filters">
+          <div class="chips" role="group" aria-label="Filter">
+            <button class="chip active" data-filter="all">All</button>
+            <button class="chip" data-filter="live">On now</button>
+            <button class="chip" data-filter="today">Today</button>
+          </div>
+          <select id="sort-select" aria-label="Sort">
+            <option value="distance">Nearest</option>
+            <option value="soonest">Happy hour soonest</option>
+            <option value="cheapest">Cheapest drink</option>
+          </select>
+        </div>
+        <input id="name-filter" class="name-filter" type="search" placeholder="Filter by name…" aria-label="Filter by name">
+        <div id="status" class="status" hidden></div>
+        <ul id="venue-list" class="venue-list"></ul>
+      </div>
+
+      <div id="tab-crawl" class="tab-body" hidden>
+        <div class="crawl-settings">
+          <label>Time at each stop
+            <select id="stay-select">
+              <option value="45">45 min</option>
+              <option value="60" selected>1 hour</option>
+              <option value="75">1 h 15 min</option>
+              <option value="90">1 h 30 min</option>
+            </select>
+          </label>
+          <div class="crawl-buttons">
+            <button id="plan-btn" class="btn btn-primary" type="button">Plan my 3-stop crawl</button>
+            <button id="another-btn" class="btn" type="button" disabled>Try another route</button>
+          </div>
+          <div id="picks" class="picks"></div>
+        </div>
+        <div id="crawl-result"></div>
+      </div>
+    </section>
+
+    <section class="map-wrap" aria-label="Map">
+      <div id="map"></div>
+      <div class="legend">
+        <span><i class="dot live"></i>On now</span>
+        <span><i class="dot later"></i>Later today</span>
+        <span><i class="dot off"></i>Not today</span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="venue-dialog" class="dialog">
+    <div id="dialog-body"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
