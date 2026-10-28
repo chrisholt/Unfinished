@@ -147,7 +147,7 @@ function renderLocationLine() {
 
 async function loadVenues() {
   const id = ++state.loadId;
-  setStatus("loading", "Finding pubs and bars within 2 km…");
+  setStatus("loading", "Finding pubs and bars within 2 km… this can take up to 30 seconds.");
   $("#venue-list").innerHTML = "";
   venueLayer.clearLayers();
 
@@ -165,7 +165,13 @@ async function loadVenues() {
   state.currency = currencyFor(state.origin.countryCode || localeCountry());
 
   try {
-    const raw = await fetchVenues(state.origin);
+    const raw = await fetchVenues(state.origin, {
+      onProgress: (attempt, total) => {
+        if (attempt > 1 && id === state.loadId) {
+          setStatus("loading", `The map data server is busy. Trying backup server ${attempt - 1} of ${total - 1}…`);
+        }
+      },
+    });
     if (id !== state.loadId) return;
     state.rawVenues = raw;
     rebuildVenues();

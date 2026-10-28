@@ -83,7 +83,8 @@ export function normaliseElement(el, origin) {
   };
 }
 
-export async function fetchVenues(origin, radius = SEARCH_RADIUS_M) {
+// `onProgress(attempt, total)` is called before each server is tried.
+export async function fetchVenues(origin, { radius = SEARCH_RADIUS_M, onProgress = () => {} } = {}) {
   const key = `venues:${origin.lat.toFixed(4)},${origin.lon.toFixed(4)},${radius}`;
   const cached = cacheGet(key);
   if (cached) return cached;
@@ -96,7 +97,8 @@ export async function fetchVenues(origin, radius = SEARCH_RADIUS_M) {
       OVERPASS_TIMEOUT_MS,
     );
   const errors = [];
-  for (const endpoint of OVERPASS_ENDPOINTS) {
+  for (const [i, endpoint] of OVERPASS_ENDPOINTS.entries()) {
+    onProgress(i + 1, OVERPASS_ENDPOINTS.length);
     try {
       let data;
       try {
