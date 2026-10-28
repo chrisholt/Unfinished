@@ -9,7 +9,7 @@ npm start          # http://localhost:8080
 npm test           # unit tests (Node 18+)
 ```
 
-No dependencies or API keys. It's a static site, so it can also be hosted as-is (e.g. GitHub Pages). Opening `index.html` straight from disk won't work because browsers block ES modules on `file://`.
+No dependencies or API keys. It's a static site: every push to `main` runs the tests and deploys it to GitHub Pages (`.github/workflows/pages.yml`). One-time setup: in the repo's **Settings → Pages**, set **Source** to **GitHub Actions**. Opening `index.html` straight from disk won't work because browsers block ES modules on `file://`.
 
 ## Features
 
