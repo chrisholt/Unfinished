@@ -1,50 +1,53 @@
 # Happy Hour Finder 🍺
 
-Find happy hours at pubs and bars within **2 km** of any spot you choose, see their **menus and prices**, and plan a **three-stop pub crawl** timed to catch the deals.
+A simple, phone-friendly list of pubs and bars within **2 km** of you, with their **happy hour times, menus and prices**. It also has buttons that open **Apple Maps** or **Google Maps**.
 
-## Run it
+Live at **https://chrisholt.github.io/Unfinished/**
+
+## Run it locally
 
 ```bash
 npm start          # http://localhost:8080
 npm test           # unit tests (Node 18+)
 ```
 
-No dependencies or API keys. It's a static site, published with GitHub Pages from the `gh-pages` branch at https://chrisholt.github.io/Unfinished/ (update it by pushing `main` to `gh-pages`). The empty `.nojekyll` file stops Pages' Jekyll step from dropping the `vendor/` folder. Tests run on every push and pull request (`.github/workflows/test.yml`). Opening `index.html` straight from disk won't work because browsers block ES modules on `file://`.
+No dependencies or API keys. It's a static site, published with GitHub Pages from the `gh-pages` branch. To update the live site, push `main` to `gh-pages`. The empty `.nojekyll` file turns off Pages' Jekyll processing. Tests run on every push and pull request (`.github/workflows/test.yml`). Opening `index.html` straight from disk won't work, because browsers block ES modules on `file://`.
 
 ## Features
 
-- **Set your location** with *Use my location*, by searching for a place, by clicking the map, or by dragging the pin. Your last location is remembered.
-- **Venues within 2 km**: every pub, bar and beer garden mapped on OpenStreetMap, plus restaurants, cafés and clubs that list happy hours there.
-- **Live status** for each venue (*On now · ends 18:30*, *Starts 17:00 · in 40 min*), with filters for *On now* / *Today* and sorting by distance, soonest happy hour or cheapest drink. Use **When** to plan for a different day or time.
-- **Menu & prices**: drinks and bar snacks, each with its regular price, happy-hour price and discount, in the local currency.
-- **3-stop pub crawl**: tries every route through the best-timed nearby venues and picks the one that keeps you inside happy hour longest with the least walking. You get arrival and leave times, walking time and distance for each leg, what to order, an estimated spend per person, the route on the map, a Google Maps walking-directions link and a share button. Add up to 3 of your own picks and the planner fills the gaps or finds the best order. Use *Try another route* to see alternatives.
-- **Open in Apple Maps or Google Maps**: search for happy hours near your pin, get walking directions to any venue, or follow each leg of the crawl in your phone's map app. These links work even if OpenStreetMap is unreachable.
-- **Correct the details**: if you know a venue's real times or prices, edit them in the venue panel. Your corrections are saved in your browser and take priority over everything else.
+- **Choose a location**: tap *Use my location*, or search for a suburb or street. The app remembers your last location.
+- **Venue list**: every pub, bar and beer garden within 2 km, nearest first. Each entry shows:
+  - the venue type, distance and address;
+  - live happy-hour status, such as *On now · ends 18:30* or *Starts 17:00 · in 40 min*;
+  - the happy-hour times;
+  - the menu, with each item's happy-hour price next to its usual price.
+- **Filter and sort**: show *On now* or *Today* only, sort by distance, soonest happy hour or cheapest drink, or filter by name. Use **When** to check another day or time.
+- **Apple Maps / Google Maps**: search for happy hours near you in either app, or get walking directions to any venue. These buttons work even when the venue list can't load.
+- **Correct the details**: if you know a venue's real times or prices, use *Correct these details* to save them on your device. Your corrections replace the estimates.
 
 ## Where the data comes from
 
 | Data | Source |
 |---|---|
-| Venues, addresses, opening hours, websites | [OpenStreetMap](https://www.openstreetmap.org) via the Overpass API |
-| Place search and locality/currency | OpenStreetMap Nominatim |
-| Happy-hour times | The venue's OSM `happy_hours` tag when it has one (badge **Listed on OpenStreetMap**), otherwise an **Estimate** |
-| Menus and prices | **Estimate**, unless you've entered the real ones (**Your info**) |
+| Venue names, addresses, websites, phone numbers | [OpenStreetMap](https://www.openstreetmap.org) via the Overpass API (with backup servers) |
+| Place search, and the suburb/currency for your location | OpenStreetMap Nominatim |
+| Happy-hour times | The venue's OpenStreetMap `happy_hours` tag if it has one (badge **Listed on OpenStreetMap**); otherwise an **Estimate** |
+| Menus and prices | **Estimate**, unless you've saved the real ones (**Your info**) |
 
-**About the estimates:** no public dataset publishes happy-hour menus and prices. Where real data isn't available, the app shows a typical schedule and menu for that kind of venue (pub, cocktail bar, beer garden…), shaped by its OSM tags (e.g. beers it lists on tap) and priced for the local currency and price level. Every estimate is clearly labelled in the app. Check with the venue before you go, and save the real details with *Correct these details*.
+**About the estimates:** no public dataset publishes happy-hour menus and prices. Where real data isn't available, the app shows a typical schedule and menu for that kind of venue (pub, cocktail bar, beer garden and so on). These are based on the venue's OpenStreetMap tags (for example, the beers it lists on tap) and priced for the local currency. Every estimate is labelled in the app. Check with the venue before you go.
 
 ## Project layout
 
 ```
-index.html        page shell
-styles.css        styles (responsive, mobile-friendly)
-src/app.js        UI, map and event handling
-src/api.js        Overpass + Nominatim clients (with fallback mirrors and caching)
-src/hours.js      opening_hours-style schedule parser and evaluator
+index.html        page
+styles.css        styles (single column, phone-first)
+src/app.js        UI and event handling
+src/api.js        Overpass + Nominatim clients (backup servers, retries, caching)
+src/hours.js      happy-hour schedule parser and evaluator
 src/menu.js       currencies, estimated schedules/menus, menu text format
 src/venues.js     merges OSM data, your corrections and estimates
-src/crawl.js      pub crawl planner
+src/maplinks.js   Apple Maps / Google Maps links
 src/store.js      saved corrections (localStorage)
-src/geo.js        distance and walking-time helpers
-vendor/leaflet/   Leaflet 1.9.4 map library (BSD-2-Clause)
+src/geo.js        distance helpers
 tests/            unit tests (node --test)
 ```

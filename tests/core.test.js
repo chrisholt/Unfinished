@@ -4,7 +4,6 @@ import { parseSchedule, statusAt, overlapMinutes, describeSchedule } from "../sr
 import { haversine } from "../src/geo.js";
 import { estimateMenu, estimateSchedule, currencyFor, textToMenu, menuToText } from "../src/menu.js";
 import { enrichVenue } from "../src/venues.js";
-import { planCrawls, bestOrder } from "../src/crawl.js";
 import { normaliseElement } from "../src/api.js";
 
 // 2026-10-28 is a Wednesday.
@@ -67,42 +66,6 @@ test("normalises Overpass ways via their centre", () => {
   assert.equal(v.id, "way/5");
   assert.equal(v.distance, 0);
   assert.equal(normaliseElement({ type: "node", id: 6, lat: 1, lon: 2, tags: {} }, { lat: 1, lon: 2 }), null);
-});
-
-function fakeVenues() {
-  const origin = { lat: -33.87, lon: 151.21 };
-  const mk = (i, dLat, dLon, schedule, kind = "pub") =>
-    enrichVenue(
-      { id: `node/${i}`, name: `V${i}`, kind, lat: origin.lat + dLat, lon: origin.lon + dLon, distance: 0, osmHappyHours: schedule, tags: {} },
-      currencyFor("au"),
-    );
-  return {
-    origin,
-    venues: [
-      mk(1, 0.001, 0, "Mo-Su 17:00-18:00"),
-      mk(2, 0.002, 0, "Mo-Su 18:00-19:00", "bar"),
-      mk(3, 0.003, 0, "Mo-Su 19:00-20:00"),
-      mk(4, 0.0035, 0, "Mo-Su 09:00-10:00"),
-      mk(5, 0.015, 0.015, "Mo-Su 17:00-20:00"),
-    ],
-  };
-}
-
-test("crawl planner sequences stops to follow happy hours", () => {
-  const { origin, venues } = fakeVenues();
-  const [best] = planCrawls(venues, origin, at(16, 55), 55);
-  assert.deepEqual(best.stops.map((s) => s.venue.name), ["V1", "V2", "V3"]);
-  for (const s of best.stops) assert.ok(s.hhMins > 30, `${s.venue.name} ${s.hhMins}`);
-  assert.ok(best.cost > 0);
-});
-
-test("crawl planner honours required picks", () => {
-  const { origin, venues } = fakeVenues();
-  const plans = planCrawls(venues, origin, at(16, 55), 55, { required: [venues[3]] });
-  assert.ok(plans.length > 0);
-  for (const p of plans) assert.ok(p.stops.some((s) => s.venue.id === "node/4"));
-  const fixed = bestOrder([venues[2], venues[0], venues[1]], origin, at(16, 55), 55);
-  assert.deepEqual(fixed.stops.map((s) => s.venue.name), ["V1", "V2", "V3"]);
 });
 
 test("map app links", async () => {
