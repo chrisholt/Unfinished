@@ -1,5 +1,5 @@
 // Combines OSM venue data, user corrections and estimates into the shape the
-// UI and crawl planner use.
+// UI uses.
 
 import { parseSchedule } from "./hours.js";
 import { estimateMenu, estimateSchedule, cheapestDrink } from "./menu.js";

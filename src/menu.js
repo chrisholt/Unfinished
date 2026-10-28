@@ -162,7 +162,7 @@ export function estimateMenu(venue, currency) {
   ];
 }
 
-// Cheapest happy-hour drink, used for sorting and the crawl budget.
+// Cheapest happy-hour drink, used to sort by price.
 export function cheapestDrink(menu) {
   const drinks = menu.find((s) => s.section === "Drinks")?.items || [];
   return drinks.reduce((best, i) => (!best || i.happy < best.happy ? i : best), null);

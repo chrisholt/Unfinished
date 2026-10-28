@@ -1,11 +1,6 @@
-// Distance and walking-time helpers.
+// Distance helpers.
 
 export const SEARCH_RADIUS_M = 2000;
-
-// Straight-line distances underestimate real street routes; this factor is a
-// common rule of thumb for dense urban grids.
-const DETOUR_FACTOR = 1.3;
-const WALK_SPEED_M_PER_MIN = 80; // ~4.8 km/h
 
 export function haversine(a, b) {
   const R = 6371000;
@@ -16,14 +11,6 @@ export function haversine(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-export function walkingMetres(a, b) {
-  return haversine(a, b) * DETOUR_FACTOR;
-}
-
-export function walkingMinutes(a, b) {
-  return Math.max(1, Math.round(walkingMetres(a, b) / WALK_SPEED_M_PER_MIN));
 }
 
 export function formatDistance(m) {

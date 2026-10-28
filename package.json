@@ -1,7 +1,7 @@
 {
   "name": "happy-hour-finder",
   "version": "1.0.0",
-  "description": "Find happy hours, menus and prices within 2 km and plan a three-stop pub crawl.",
+  "description": "Happy hours, menus and prices at pubs and bars within 2 km.",
   "type": "module",
   "private": true,
   "scripts": {
