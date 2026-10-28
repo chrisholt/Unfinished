@@ -96,17 +96,6 @@ export function statusAt(rules, now) {
   return next ? { active: false, nextStart: next[0], nextEnd: next[1] } : { active: false };
 }
 
-// Minutes of [from, to] that fall inside happy hour.
-export function overlapMinutes(rules, from, to) {
-  let total = 0;
-  for (const [s, e] of intervalsBetween(rules, from, to)) {
-    const a = Math.max(s.getTime(), from.getTime());
-    const b = Math.min(e.getTime(), to.getTime());
-    if (b > a) total += (b - a) / 60000;
-  }
-  return Math.round(total);
-}
-
 export function formatClock(mins) {
   const m = ((mins % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;

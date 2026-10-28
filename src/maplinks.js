@@ -1,8 +1,7 @@
 // Links that open Apple Maps or Google Maps (the app on phones, the website
-// elsewhere). They need no API key, so they work even when OpenStreetMap
-// data can't be loaded.
+// elsewhere). They need no API key. Places are { lat, lon } or an address.
 
-const pt = (p) => `${p.lat},${p.lon}`;
+const pt = (p) => (typeof p === "string" ? p : `${p.lat},${p.lon}`);
 
 export function appleSearchUrl(query, near) {
   const params = new URLSearchParams({ q: query });

@@ -1,53 +1,33 @@
-import { formatDistance } from "./geo.js";
-import { statusAt, describeSchedule, minutesUntil, formatDuration, parseSchedule, formatClock, minutesOf } from "./hours.js";
-import { currencyFor, formatPrice, menuToText, textToMenu } from "./menu.js";
-import { fetchVenues, searchPlaces, reverseGeocode } from "./api.js";
-import { enrichVenue, SOURCE_LABELS } from "./venues.js";
-import { saveOverride, clearOverride } from "./store.js";
+import { haversine, formatDistance, SEARCH_RADIUS_M } from "./geo.js";
+import { parseSchedule, statusAt, minutesUntil, formatDuration } from "./hours.js";
 import { appleSearchUrl, googleSearchUrl, appleWalkUrl, googleWalkUrl } from "./maplinks.js";
+import { VENUES, HOME, CHECKED_ON } from "./data/victoria.js";
 
 const $ = (sel) => document.querySelector(sel);
-const LOCATION_KEY = "hhf:location:v1";
+const CITY = "Victoria, BC";
 
-const KIND_LABELS = {
-  pub: "Pub", bar: "Bar", biergarten: "Beer garden", nightclub: "Club", restaurant: "Restaurant", cafe: "Café",
-};
+const venues = VENUES.map((v) => ({ ...v, rules: parseSchedule(v.schedule) }));
 
 const state = {
-  origin: null, // { lat, lon, label, countryCode }
-  currency: currencyFor(localeCountry()),
-  rawVenues: [],
-  venues: [],
+  origin: HOME,
   filter: "all",
   sort: "distance",
-  nameFilter: "",
   when: null, // null = live "now"
-  loadId: 0,
 };
-
-function localeCountry() {
-  const m = (navigator.language || "").match(/-([A-Za-z]{2})$/);
-  return m ? m[1].toLowerCase() : "us";
-}
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-function safeUrl(url) {
-  if (!url) return null;
-  const u = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-  try {
-    const parsed = new URL(u);
-    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
-  } catch {
-    return null;
-  }
-}
-
 const now = () => state.when || new Date();
-const price = (v) => formatPrice(v, state.currency);
-const clock = (d) => formatClock(minutesOf(d));
+// 12-hour times to match the venues' own listings, e.g. "5 pm", "5:30 pm".
+function clock(d) {
+  const h = d.getHours() % 12 || 12;
+  const m = d.getMinutes();
+  return `${h}${m ? `:${String(m).padStart(2, "0")}` : ""} ${d.getHours() < 12 ? "am" : "pm"}`;
+}
+const fullAddress = (v) => `${v.name}, ${v.address.replace(/\s*\(.*\)$/, "")}, ${CITY}`;
+const checkedOn = new Date(`${CHECKED_ON}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
 
 function toast(msg) {
   const el = $("#toast");
@@ -57,93 +37,11 @@ function toast(msg) {
   toast.timer = setTimeout(() => (el.hidden = true), 3500);
 }
 
-// ---------- Location ----------
-
-async function setLocation({ lat, lon, label = null, countryCode = null }) {
-  state.origin = { lat, lon, label, countryCode };
-  try {
-    localStorage.setItem(LOCATION_KEY, JSON.stringify(state.origin));
-  } catch {
-    // Remembering the location is a convenience only.
-  }
-  renderLocationLine();
-  await loadVenues();
-}
-
-function renderLocationLine() {
-  const o = state.origin;
-  $("#location-line").innerHTML = `<strong>Within 2 km of</strong> ${esc(o.label || `${o.lat.toFixed(4)}, ${o.lon.toFixed(4)}`)}`;
-  renderMapsLinks();
-}
-
-// Hand-off to the phone's map apps, near the chosen spot (or "near me").
-function renderMapsLinks() {
-  const near = state.origin;
-  $("#maps-links").innerHTML = `<span class="muted">Search happy hours in</span>
-    <a class="btn btn-small" href="${esc(appleSearchUrl("happy hour", near))}" target="_blank" rel="noopener">Apple Maps</a>
-    <a class="btn btn-small" href="${esc(googleSearchUrl("happy hour", near))}" target="_blank" rel="noopener">Google Maps</a>`;
-}
-
-async function loadVenues() {
-  const id = ++state.loadId;
-  setStatus("loading", "Finding pubs and bars within 2 km… this can take up to 30 seconds.");
-  $("#venue-list").innerHTML = "";
-
-  if (!state.origin.countryCode || !state.origin.label) {
-    try {
-      const place = await reverseGeocode(state.origin);
-      if (id !== state.loadId) return;
-      state.origin.label ||= place.label;
-      state.origin.countryCode ||= place.countryCode;
-      renderLocationLine();
-    } catch {
-      // Fall back to the browser locale for currency.
-    }
-  }
-  state.currency = currencyFor(state.origin.countryCode || localeCountry());
-
-  try {
-    const raw = await fetchVenues(state.origin, {
-      onProgress: (attempt, total) => {
-        if (attempt > 1 && id === state.loadId) {
-          setStatus("loading", `The venue server is busy. Trying backup server ${attempt - 1} of ${total - 1}…`);
-        }
-      },
-    });
-    if (id !== state.loadId) return;
-    state.rawVenues = raw;
-    rebuildVenues();
-    if (!raw.length) setStatus("empty", "No pubs or bars are listed within 2 km here. Try the Apple Maps or Google Maps buttons above.");
-    else setStatus(null);
-  } catch (err) {
-    if (id !== state.loadId) return;
-    setStatus(
-      "error",
-      `${esc(err.message)} You can also search with the Apple Maps or Google Maps buttons above.
-       <button class="btn btn-small" id="retry-btn">Retry</button>`,
-    );
-    $("#retry-btn")?.addEventListener("click", loadVenues);
-  }
-}
-
-function rebuildVenues() {
-  state.venues = state.rawVenues.map((v) => enrichVenue(v, state.currency));
-  renderVenueList();
-}
-
-function setStatus(kind, html) {
-  const el = $("#status");
-  el.hidden = !kind;
-  el.className = `status ${kind || ""}`;
-  el.innerHTML = kind === "loading" ? `<span class="spinner"></span>${html}` : html || "";
-}
-
-// ---------- Venue list ----------
+// ---------- Rendering ----------
 
 function statusText(v) {
   const t = now();
   const st = statusAt(v.rules, t);
-  if (!v.rules.length) return { cls: "off", text: "No happy hour listed" };
   if (st.active) return { cls: "live", text: `On now · ends ${clock(st.endsAt)} (${formatDuration(minutesUntil(st.endsAt, t))} left)` };
   if (!st.nextStart) return { cls: "off", text: "No upcoming happy hour" };
   const sameDay = st.nextStart.toDateString() === t.toDateString();
@@ -156,9 +54,11 @@ function statusText(v) {
 
 function visibleVenues() {
   const t = now();
-  let list = state.venues.filter((v) => v.name.toLowerCase().includes(state.nameFilter));
-  if (state.filter === "live") list = list.filter((v) => statusAt(v.rules, t).active);
-  if (state.filter === "today") list = list.filter((v) => statusText(v).cls !== "off");
+  let list = venues
+    .map((v) => ({ ...v, distance: haversine(state.origin, v), status: statusText(v) }))
+    .filter((v) => v.distance <= SEARCH_RADIUS_M);
+  if (state.filter === "live") list = list.filter((v) => v.status.cls === "live");
+  if (state.filter === "today") list = list.filter((v) => v.status.cls !== "off");
   const soonKey = (v) => {
     const st = statusAt(v.rules, t);
     return st.active ? -1 : st.nextStart ? st.nextStart - t : Infinity;
@@ -166,22 +66,20 @@ function visibleVenues() {
   const sorters = {
     distance: (a, b) => a.distance - b.distance,
     soonest: (a, b) => soonKey(a) - soonKey(b) || a.distance - b.distance,
-    cheapest: (a, b) => (a.cheapest?.happy ?? Infinity) - (b.cheapest?.happy ?? Infinity) || a.distance - b.distance,
   };
   return list.sort(sorters[state.sort]);
 }
 
-function menuHtml(v, active) {
-  return v.menu
+function itemsHtml(v) {
+  if (!v.items.length) return `<p class="muted">Menu items and prices aren't published online. Ask at the bar.</p>`;
+  const sections = [...new Set(v.items.map((i) => i.section))];
+  return sections
     .map(
-      (s) => `<table class="menu ${active ? "hh-on" : ""}">
-        <caption>${esc(s.section)}</caption>
-        <thead><tr><th scope="col">Item</th><th scope="col">Happy hour</th><th scope="col">Usually</th></tr></thead>
-        <tbody>${s.items
-          .map(
-            (i) => `<tr><td>${esc(i.name)}</td><td class="hh">${price(i.happy)}</td>
-              <td class="reg">${i.happy < i.regular ? `<s>${price(i.regular)}</s>` : price(i.regular)}</td></tr>`,
-          )
+      (s) => `<table class="menu">
+        <caption>${esc(s)}</caption>
+        <tbody>${v.items
+          .filter((i) => i.section === s)
+          .map((i) => `<tr><td>${esc(i.name)}</td>${i.price ? `<td class="hh">${esc(i.price)}</td>` : `<td class="hh none">no price listed</td>`}</tr>`)
           .join("")}</tbody>
       </table>`,
     )
@@ -189,73 +87,46 @@ function menuHtml(v, active) {
 }
 
 function venueHtml(v) {
-  const st = statusText(v);
-  const web = safeUrl(v.website);
-  const hasUserInfo = v.scheduleSource === "user" || v.menuSource === "user";
-  return `<li class="venue" data-id="${esc(v.id)}">
+  const sources = v.sources
+    .map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>`)
+    .join(" · ");
+  return `<li class="venue">
     <h2>${esc(v.name)}</h2>
-    <p class="meta">${esc(KIND_LABELS[v.kind] || v.kind)} · ${formatDistance(v.distance)} away${v.address ? ` · ${esc(v.address)}` : ""}</p>
-    <p class="hh-status ${st.cls}"><i class="dot ${st.cls}"></i>${esc(st.text)}</p>
-    <p class="schedule"><strong>Happy hour:</strong> ${esc(describeSchedule(v.rules).join(", ") || "none listed")}
-      <span class="badge ${v.scheduleSource}">${SOURCE_LABELS[v.scheduleSource]}</span></p>
-    <div class="menu-head"><strong>Menu &amp; prices</strong> <span class="badge ${v.menuSource}">${SOURCE_LABELS[v.menuSource]}</span></div>
-    ${menuHtml(v, st.cls === "live")}
+    <p class="meta">${esc(v.kind)} · about ${formatDistance(v.distance)} away · ${esc(v.address)}</p>
+    <p class="hh-status ${v.status.cls}"><i class="dot ${v.status.cls}"></i>${esc(v.status.text)}</p>
+    <p class="schedule"><strong>Happy hour:</strong> ${esc(v.hoursText)}</p>
+    ${itemsHtml(v)}
+    ${v.note ? `<p class="note">${esc(v.note)}</p>` : ""}
     <div class="actions">
-      <a class="btn btn-small" href="${esc(appleWalkUrl(v))}" target="_blank" rel="noopener">Apple Maps</a>
-      <a class="btn btn-small" href="${esc(googleWalkUrl(v))}" target="_blank" rel="noopener">Google Maps</a>
-      ${web ? `<a class="btn btn-small" href="${esc(web)}" target="_blank" rel="noopener">Website</a>` : ""}
+      <a class="btn btn-small" href="${esc(appleWalkUrl(fullAddress(v)))}" target="_blank" rel="noopener">Apple Maps</a>
+      <a class="btn btn-small" href="${esc(googleWalkUrl(fullAddress(v)))}" target="_blank" rel="noopener">Google Maps</a>
+      ${v.website ? `<a class="btn btn-small" href="${esc(v.website)}" target="_blank" rel="noopener">Website</a>` : ""}
       ${v.phone ? `<a class="btn btn-small" href="tel:${esc(v.phone.replace(/[^+\d]/g, ""))}">Call</a>` : ""}
     </div>
-    <details class="editor">
-      <summary>Correct these details</summary>
-      <form>
-        <label>Happy hour times
-          <input name="schedule" value="${esc(v.scheduleText)}" placeholder="Mo-Fr 16:00-18:00; Sa 14:00-17:00">
-        </label>
-        <p class="hint">Days: Mo Tu We Th Fr Sa Su, ranges like <code>Mo-Fr</code>, lists like <code>Fr,Sa</code>. Separate rules with <code>;</code>.</p>
-        <label>Menu (one item per line: <code>Name | usual price | happy-hour price</code>; sections start with <code>#</code>)
-          <textarea name="menu" rows="8">${esc(menuToText(v.menu))}</textarea>
-        </label>
-        <div class="actions">
-          <button class="btn btn-primary btn-small" type="submit">Save</button>
-          ${hasUserInfo ? `<button class="btn btn-small" type="button" data-action="reset">Remove my corrections</button>` : ""}
-        </div>
-      </form>
-    </details>
+    <p class="sources">Source: ${sources}</p>
   </li>`;
 }
 
-function renderVenueList() {
+function render() {
+  const atHome = state.origin === HOME;
+  $("#location-line").innerHTML = `<strong>Within 2 km of</strong> ${atHome ? esc(HOME.label) : "your location"}`;
+  $("#home-btn").hidden = atHome;
+  $("#maps-links").innerHTML = `<span class="muted">Search more happy hours nearby in</span>
+    <a class="btn btn-small" href="${esc(appleSearchUrl("happy hour", state.origin))}" target="_blank" rel="noopener">Apple Maps</a>
+    <a class="btn btn-small" href="${esc(googleSearchUrl("happy hour", state.origin))}" target="_blank" rel="noopener">Google Maps</a>`;
+
   const list = visibleVenues();
-  const el = $("#venue-list");
-  if (state.venues.length && !list.length) {
-    el.innerHTML = `<li class="empty">No venues match this filter${state.filter === "live" ? " right now" : ""}.</li>`;
-    return;
-  }
-  el.innerHTML = list.map(venueHtml).join("");
+  const status = $("#status");
+  const inRange = venues.some((v) => haversine(state.origin, v) <= SEARCH_RADIUS_M);
+  status.hidden = list.length > 0;
+  status.innerHTML = !inRange
+    ? "No researched happy hours within 2 km of here. So far this app covers James Bay and downtown Victoria. Use the Apple Maps or Google Maps buttons above to search here."
+    : `No happy hours match this filter${state.filter === "live" ? " right now" : ""}.`;
+  $("#venue-list").innerHTML = list.map(venueHtml).join("");
 }
 
-$("#venue-list").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const id = e.target.closest(".venue")?.dataset.id;
-  const form = e.target;
-  const schedule = form.schedule.value.trim();
-  if (schedule && !parseSchedule(schedule).length) {
-    toast("Couldn't read those times. Try a format like Mo-Fr 16:00-18:00.");
-    return;
-  }
-  saveOverride(id, { schedule: schedule || null, menu: textToMenu(form.menu.value) });
-  rebuildVenues();
-  toast("Saved on this device.");
-});
-
-$("#venue-list").addEventListener("click", (e) => {
-  if (e.target.closest("[data-action=reset]")) {
-    clearOverride(e.target.closest(".venue").dataset.id);
-    rebuildVenues();
-    toast("Your corrections were removed.");
-  }
-});
+$("#footer").innerHTML = `Happy hour details were collected from the linked sources on ${esc(checkedOn)}.
+  Venues change their deals, so check with the venue before you go. Distances are approximate, in a straight line.`;
 
 // ---------- Controls ----------
 
@@ -263,18 +134,13 @@ document.querySelectorAll(".chip").forEach((chip) =>
   chip.addEventListener("click", () => {
     document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === chip));
     state.filter = chip.dataset.filter;
-    renderVenueList();
+    render();
   }),
 );
 
 $("#sort-select").addEventListener("change", (e) => {
   state.sort = e.target.value;
-  renderVenueList();
-});
-
-$("#name-filter").addEventListener("input", (e) => {
-  state.nameFilter = e.target.value.trim().toLowerCase();
-  renderVenueList();
+  render();
 });
 
 function toLocalInput(d) {
@@ -286,24 +152,23 @@ $("#when-input").value = toLocalInput(new Date());
 $("#when-input").addEventListener("change", (e) => {
   const d = e.target.value ? new Date(e.target.value) : null;
   state.when = d && !isNaN(d) ? d : null;
-  renderVenueList();
+  render();
 });
 $("#now-btn").addEventListener("click", () => {
   state.when = null;
   $("#when-input").value = toLocalInput(new Date());
-  renderVenueList();
+  render();
 });
 
-// Keep "now" statuses fresh while the page stays open (skipped while the
-// user is typing a correction, so their edit isn't wiped).
+// Keep "now" statuses fresh while the page stays open.
 setInterval(() => {
-  if (state.when || !state.venues.length || document.querySelector(".editor[open]")) return;
+  if (state.when) return;
   $("#when-input").value = toLocalInput(new Date());
-  renderVenueList();
+  render();
 }, 60000);
 
 $("#locate-btn").addEventListener("click", () => {
-  if (!navigator.geolocation) return toast("Your browser doesn't support location. Search instead.");
+  if (!navigator.geolocation) return toast("Your browser doesn't support location.");
   const btn = $("#locate-btn");
   const reset = () => {
     btn.disabled = false;
@@ -314,49 +179,20 @@ $("#locate-btn").addEventListener("click", () => {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       reset();
-      setLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      state.origin = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      render();
     },
     (err) => {
       reset();
-      toast(err.code === 1 ? "Location permission denied. Search for a place instead." : "Couldn't get your location. Search instead.");
+      toast(err.code === 1 ? "Location permission denied." : "Couldn't get your location.");
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
   );
 });
 
-const results = $("#search-results");
-$("#search-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const q = $("#search-input").value.trim();
-  if (!q) return;
-  results.hidden = false;
-  results.innerHTML = `<li class="muted">Searching…</li>`;
-  try {
-    const places = await searchPlaces(q);
-    results.innerHTML = places.length
-      ? places.map((p, i) => `<li><button type="button" data-i="${i}">${esc(p.label)}</button></li>`).join("")
-      : `<li class="muted">No places found.</li>`;
-    results.onclick = (ev) => {
-      const i = ev.target.closest("[data-i]")?.dataset.i;
-      if (i === undefined) return;
-      const p = places[i];
-      results.hidden = true;
-      setLocation({ lat: p.lat, lon: p.lon, label: p.label.split(",").slice(0, 3).join(","), countryCode: p.countryCode });
-    };
-  } catch {
-    results.innerHTML = `<li class="muted">Search is unavailable right now. Try “Use my location”.</li>`;
-  }
-});
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("#search-form")) results.hidden = true;
+$("#home-btn").addEventListener("click", () => {
+  state.origin = HOME;
+  render();
 });
 
-// ---------- Start ----------
-
-renderMapsLinks();
-try {
-  const saved = JSON.parse(localStorage.getItem(LOCATION_KEY));
-  if (saved?.lat != null) setLocation(saved);
-} catch {
-  // No saved location; wait for the user.
-}
+render();
