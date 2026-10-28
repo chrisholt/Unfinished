@@ -1,0 +1,12 @@
+{
+  "name": "happy-hour-finder",
+  "version": "1.0.0",
+  "description": "Find happy hours, menus and prices within 2 km and plan a three-stop pub crawl.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "license": "MIT"
+}
