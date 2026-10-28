@@ -5,6 +5,7 @@ import { fetchVenues, searchPlaces, reverseGeocode } from "./api.js";
 import { enrichVenue, SOURCE_LABELS } from "./venues.js";
 import { planCrawls, bestOrder, directionsUrl, CRAWL_STOPS } from "./crawl.js";
 import { saveOverride, clearOverride } from "./store.js";
+import { appleSearchUrl, googleSearchUrl, appleWalkUrl, googleWalkUrl } from "./maplinks.js";
 
 const L = window.L;
 const $ = (sel) => document.querySelector(sel);
@@ -64,10 +65,24 @@ function toast(msg) {
 // ---------- Map ----------
 
 const map = L.map("map", { zoomControl: true }).setView([20, 0], 2);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  attribution: OSM_ATTRIBUTION,
 }).addTo(map);
+
+// If OpenStreetMap's own tile server won't load (blocked or overloaded),
+// switch once to CARTO's copy of the same map.
+let tilesLoaded = 0;
+let tileErrors = 0;
+tiles.on("tileload", () => tilesLoaded++);
+tiles.on("tileerror", () => {
+  if (++tileErrors === 4 && tilesLoaded === 0) {
+    map.attributionControl.removeAttribution(OSM_ATTRIBUTION);
+    map.attributionControl.addAttribution(`${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`);
+    tiles.setUrl("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png");
+  }
+});
 
 const venueLayer = L.layerGroup().addTo(map);
 const crawlLayer = L.layerGroup().addTo(map);
@@ -143,6 +158,15 @@ function renderLocationLine() {
   const coords = `${o.lat.toFixed(4)}, ${o.lon.toFixed(4)}`;
   $("#location-line").innerHTML = `<strong>Within 2 km of</strong> ${esc(o.label || coords)}
     <span class="muted">· drag the pin or click the map to move</span>`;
+  renderMapsLinks();
+}
+
+// Hand-off to the phone's map apps, near the pin (or "near me" without one).
+function renderMapsLinks() {
+  const near = state.origin;
+  $("#maps-links").innerHTML = `<span class="muted">Search happy hours in</span>
+    <a class="btn btn-small" href="${esc(appleSearchUrl("happy hour", near))}" target="_blank" rel="noopener">Apple Maps</a>
+    <a class="btn btn-small" href="${esc(googleSearchUrl("happy hour", near))}" target="_blank" rel="noopener">Google Maps</a>`;
 }
 
 async function loadVenues() {
@@ -319,7 +343,8 @@ function openVenue(id) {
     <div class="links">
       ${web ? `<a class="btn btn-small" href="${esc(web)}" target="_blank" rel="noopener">Website</a>` : ""}
       ${v.phone ? `<a class="btn btn-small" href="tel:${esc(v.phone.replace(/[^+\d]/g, ""))}">Call ${esc(v.phone)}</a>` : ""}
-      <a class="btn btn-small" href="https://www.google.com/maps/dir/?api=1&destination=${v.lat},${v.lon}&travelmode=walking" target="_blank" rel="noopener">Directions</a>
+      <a class="btn btn-small" href="${esc(appleWalkUrl(v))}" target="_blank" rel="noopener">Apple Maps</a>
+      <a class="btn btn-small" href="${esc(googleWalkUrl(v))}" target="_blank" rel="noopener">Google Maps</a>
       <a class="btn btn-small" href="https://www.openstreetmap.org/${esc(v.id)}" target="_blank" rel="noopener">OSM</a>
       <button class="btn btn-small" data-action="pick">${state.picks.includes(v.id) ? "✓ In crawl" : "+ Add to crawl"}</button>
       <button class="btn btn-small" data-action="edit">Correct these details</button>
@@ -474,7 +499,9 @@ function renderCrawl() {
           const cover = s.hhMins >= plan.stayMins ? "live" : s.hhMins > 0 ? "later" : "off";
           const coverText = s.hhMins >= plan.stayMins ? "Happy hour the whole stay" : s.hhMins > 0 ? `Happy hour for ${s.hhMins} of ${plan.stayMins} min` : "Outside happy hour";
           return `<li>
-            <div class="walk">🚶 ${s.walkMin} min · ${formatDistance(s.walkM)} ${i === 0 ? "from your pin" : "from previous stop"}</div>
+            <div class="walk">🚶 ${s.walkMin} min · ${formatDistance(s.walkM)} ${i === 0 ? "from your pin" : "from previous stop"}
+              · <a href="${esc(appleWalkUrl(s.venue, i ? plan.stops[i - 1].venue : state.origin))}" target="_blank" rel="noopener">Apple Maps</a>
+              · <a href="${esc(googleWalkUrl(s.venue, i ? plan.stops[i - 1].venue : state.origin))}" target="_blank" rel="noopener">Google Maps</a></div>
             <div class="stop">
               <div class="stop-num">${i + 1}</div>
               <div class="stop-body">
@@ -491,7 +518,7 @@ function renderCrawl() {
         .join("")}
     </ol>
     <div class="links">
-      <a class="btn btn-primary btn-small" href="${esc(directionsUrl(state.origin, plan))}" target="_blank" rel="noopener">Walking directions</a>
+      <a class="btn btn-primary btn-small" href="${esc(directionsUrl(state.origin, plan))}" target="_blank" rel="noopener">Whole route in Google Maps</a>
       <button class="btn btn-small" id="share-btn">Share crawl</button>
     </div>
     <p class="hint">*Two drinks per stop plus one snack, at happy-hour prices while the deal is on. Walking times assume 4.8 km/h on streets roughly 30% longer than a straight line. Route ${state.planIndex + 1} of ${state.plans.length}.</p>`;
@@ -651,6 +678,7 @@ document.addEventListener("click", (e) => {
 // ---------- Start ----------
 
 renderPicks();
+renderMapsLinks();
 try {
   const saved = JSON.parse(localStorage.getItem(LOCATION_KEY));
   if (saved?.lat != null) setLocation(saved);
